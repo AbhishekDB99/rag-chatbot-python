@@ -9,7 +9,7 @@ If the answer isnt in the context, say "I dont have that information in the docu
 Cite which source each fact comes from."""
 
 def generate(question, chunks):
-    context = "\n\n---\n\n".join(f"[{c['source']}]\n{c['content']}" for c in chunks)
+    context = "\n\n---\n\n".join(f"[{c['source']} p.{c['page']}]\n{c['content']}" for c in chunks)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0,

@@ -12,8 +12,8 @@ def retrieve(question, k=5):
     vec = embed(question)
     cur = conn.cursor()
     cur.execute(
-        "SELECT content, source, embedding <=> %s AS distance "
+        "SELECT content, source, page, embedding <=> %s AS distance "
         "FROM chunks ORDER BY distance LIMIT %s",
         (vec, k)
     )
-    return [{"content": r[0], "source": r[1], "distance": r[2]} for r in cur.fetchall()]
+    return [{"content": r[0], "source": r[1], "page": r[2], "distance": r[3]} for r in cur.fetchall()]

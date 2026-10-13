@@ -7,6 +7,7 @@ from pgvector.psycopg2 import register_vector
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
+import time
 
 load_dotenv(override=True)
 client = OpenAI()
@@ -14,8 +15,8 @@ conn = psycopg2.connect(os.environ["DATABASE_URL"])
 register_vector(conn)
 
 def read_pdf(path):
-    text = "\n".join(page.get_text() for page in pymupdf.open(path))
-    return text.replace("\x00", "")
+    return [(i + 1, page.get_text().replace("\x00", ""))
+            for i, page in enumerate(pymupdf.open(path))]
 
 def chunk_text(text, size=200, overlap=30):
     words = text.split()
@@ -26,22 +27,34 @@ def embed(text):
     res = client.embeddings.create(model="text-embedding-3-small", input=[text])
     return np.array(res.data[0].embedding)
 
+def embed_many(texts, batch_size=100):
+    vectors = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        res = client.embeddings.create(model="text-embedding-3-small", input=batch)
+        vectors.extend(np.array(d.embedding) for d in res.data)
+    return vectors
+
 def ingest(pdf_path):
-    full_text = read_pdf(pdf_path)
-    if not full_text.strip():
+    pages = read_pdf(pdf_path)
+    rows = [(page_num, c) for page_num, text in pages for c in chunk_text(text)]
+    if not rows:
         print(f"No text extracted from {pdf_path}, skipping (scanned/image PDF?)")
         return
-    chunks = chunk_text(full_text)
+    vectors = embed_many([c for _, c in rows])               # few API calls instead of ~100
     cur = conn.cursor()
-    for c in chunks:
+    for (page_num, c), vec in zip(rows, vectors):
         cur.execute(
-            "INSERT INTO chunks (source, content, embedding) VALUES (%s, %s, %s)",
-            (os.path.basename(pdf_path), c, embed(c))
+            "INSERT INTO chunks (source, page, content, embedding) VALUES (%s, %s, %s, %s)",
+            (os.path.basename(pdf_path), page_num, c, vec)
         )
     conn.commit()
-    print(f"Ingested {len(chunks)} chunks from {pdf_path}")
-    
+    print(f"Ingested {len(rows)} chunks from {pdf_path}")
+
+
 if __name__ == "__main__":
+    start = time.time()
     folder = sys.argv[1]
     for path in Path(folder).glob("*.pdf"):
         ingest(str(path))
+    print(f"Took {time.time() - start:.1f}s")
