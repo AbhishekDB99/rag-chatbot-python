@@ -8,3 +8,12 @@
    );
    CREATE INDEX IF NOT EXISTS chunks_embedding_idx
        ON chunks USING hnsw (embedding vector_cosine_ops);
+
+
+CREATE TABLE IF NOT EXISTS orders (
+    id serial PRIMARY KEY,
+    status text,
+    customer text,
+    updated_at timestamptz DEFAULT now()
+);
+INSERT INTO orders (status, customer) VALUES ('shipped','Acme'), ('pending','Beta'), ('delayed','Gamma');
